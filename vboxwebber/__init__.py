@@ -22,6 +22,7 @@
 # the SOAP requests towards a VirtualBox web service.
 
 import zeep
+from zeep.proxy import ServiceProxy
 
 class ObjectRefManager:
   def __init__(self, sessionmgr):
@@ -3830,6 +3831,7 @@ class IAppliance(IUnknown):
        """
    
        req = (self.handle,)
+       self.mgr: IWebsessionManager2
        val = self.mgr.getService().IAppliance_interpret(*req)
        
        return 
@@ -4278,7 +4280,7 @@ class IVirtualSystemDescription(IUnknown):
        req += (_arg_type,)
        val = self.mgr.getService().IVirtualSystemDescription_getDescriptionByType(*req)
        
-       return VirtualSystemDescriptionType(self.mgr,val["types"], True), String(self.mgr,val["refs"], True), String(self.mgr,val["OVFValues"], True), String(self.mgr,val["VBoxValues"], True), String(self.mgr,val["extraConfigValues"], True)
+       return VirtualSystemDescriptionType(self.mgr,val["types"]), String(self.mgr,val["refs"], True), String(self.mgr,val["OVFValues"], True), String(self.mgr,val["VBoxValues"], True), String(self.mgr,val["extraConfigValues"], True)
 
    def removeDescriptionByType(self, _arg_type):
        """Delete all records which are equal to the passed type from the list
@@ -4933,7 +4935,7 @@ class IUnattended(IUnknown):
         that goes online to fetch the packages (e.g. debian-*-netinst.iso) or
         to fetch updates during the install process.
 
-        Format: [schema=]schema://[login@password:]proxy[:port][;...]
+        Format: [schema=]schema://[login[:password]@]proxy[:port][;...]
 
         The default is taken from the host proxy configuration (once implemented).
        """
@@ -4948,7 +4950,7 @@ class IUnattended(IUnknown):
         that goes online to fetch the packages (e.g. debian-*-netinst.iso) or
         to fetch updates during the install process.
 
-        Format: [schema=]schema://[login@password:]proxy[:port][;...]
+        Format: [schema=]schema://[login[:password]@]proxy[:port][;...]
 
         The default is taken from the host proxy configuration (once implemented).
        """
@@ -13596,7 +13598,7 @@ class ISystemProperties(IUnknown):
        """
         Proxy server URL for the ::ProxyMode_Manual proxy mode.
 
-        The format is: [{type}"://"][{userid}[@{password}]:]{server}[":"{port}]
+        The format is: [{type}"://"][{userid}[:{password}]@]{server}[":"{port}]
 
         Valid types are: http (default), https, socks4, socks4a, socks5, socks5h and direct.
         Please note that these are proxy types defining how the proxy operates rather than
@@ -13620,7 +13622,7 @@ class ISystemProperties(IUnknown):
        """
         Proxy server URL for the ::ProxyMode_Manual proxy mode.
 
-        The format is: [{type}"://"][{userid}[@{password}]:]{server}[":"{port}]
+        The format is: [{type}"://"][{userid}[:{password}]@]{server}[":"{port}]
 
         Valid types are: http (default), https, socks4, socks4a, socks5, socks5h and direct.
         Please note that these are proxy types defining how the proxy operates rather than
@@ -14945,7 +14947,7 @@ class IGuestSession(IUnknown):
         
         :param _arg_path: Path to the directory to check if exists. Guest path style.
         :param _arg_followSymlinks: If @c true, symbolic links in the final component will be followed and the existance of the symlink target made the question for this method. If @c false, a symbolic link in the final component will make the method return @c false (because a symlink isn't a directory).
-        :return: Returns @c true if the directory exists, @c false if not.
+        :return: Returns @c true if the directory exists, @c false if not, or is not a directory.
         :rtype: boolean
 
         Expected result codes:
@@ -21454,7 +21456,7 @@ owns the object will most likely fail or crash your application.
        """
         Notifies framebuffer about 3D backend event.
       
-        :param _arg_type: event type. Currently only VBOX3D_NOTIFY_EVENT_TYPE_VISIBLE_3DDATA is supported.
+        :param _arg_type: event type. VBOX3D_NOTIFY_TYPE_* in VBoxVideo3D.h
         :param _arg_data: event-specific data, depends on the supplied event type
 
        """
@@ -37736,9 +37738,111 @@ class ICloudNetworkGatewayInfo(IUnknown):
        val = self.mgr.getService().ICloudNetworkGatewayInfo_getPublicIP(self.handle)
        return String(self.mgr, val)
 
+   def getSecondaryPublicIP(self):
+       """ """
+       val = self.mgr.getService().ICloudNetworkGatewayInfo_getSecondaryPublicIP(self.handle)
+       return String(self.mgr, val)
+
+   def getMacAddress(self):
+       """ """
+       val = self.mgr.getService().ICloudNetworkGatewayInfo_getMacAddress(self.handle)
+       return String(self.mgr, val)
+
+   def getInstanceId(self):
+       """ """
+       val = self.mgr.getService().ICloudNetworkGatewayInfo_getInstanceId(self.handle)
+       return String(self.mgr, val)
 
 
-   _Attrs_ = {'publicIP':[getPublicIP,None]}
+
+   _Attrs_ = {'publicIP':[getPublicIP,None],
+              'secondaryPublicIP':[getSecondaryPublicIP,None],
+              'macAddress':[getMacAddress,None],
+              'instanceId':[getInstanceId,None]}
+
+class ICloudNetworkEnvironmentInfo(IUnknown):
+   """   """
+   def __init__(self, mgr, handle, isarray = False):
+       self.mgr = mgr
+       if handle is None:
+           raise Exception("bad handle: "+str(handle))
+       self.handle = handle
+       self.isarray = isarray
+       if self.isarray:
+           for strHnd in handle:
+               mgr.register(strHnd)
+       else:
+           mgr.register(self.handle)
+
+   def __del__(self):
+       self.releaseRemote()
+
+   def releaseRemote(self):
+        try:
+            if self.handle is not None:
+               if self.isarray:
+                   for strHnd in self.handle:
+                       self.mgr.unregister(strHnd)
+               else:
+                   self.mgr.unregister(self.handle)
+               self.handle = None;
+        except:
+            pass
+
+   def __next(self):
+      if self.isarray:
+          return self.handle.__next()
+      raise TypeError("iteration over non-sequence")
+
+   def __size(self):
+      if self.isarray:
+          return self.handle.__size()
+      raise TypeError("iteration over non-sequence")
+
+   def __len__(self):
+      if self.isarray:
+          return self.handle.__len__()
+      raise TypeError("iteration over non-sequence")
+
+   def __getitem__(self, index):
+      if self.isarray:
+          return ICloudNetworkEnvironmentInfo(self.mgr, self.handle[index])
+      raise TypeError("iteration over non-sequence")
+
+   def __str__(self):
+        if self.isarray:
+            return str(self.handle)
+        else:
+            return self.handle
+
+   def isValid(self):
+        return self.handle != None and self.handle != ''
+
+   def __getattr__(self,name):
+      hndl = ICloudNetworkEnvironmentInfo._Attrs_.get(name, None)
+      if hndl != None:
+         if hndl[0] != None:
+           return hndl[0](self)
+         else:
+          raise AttributeError
+      else:
+         return IUnknown.__getattr__(self, name)
+
+   def __setattr__(self, name, val):
+      hndl = ICloudNetworkEnvironmentInfo._Attrs_.get(name, None)
+      if (hndl != None and hndl[1] != None):
+         hndl[1](self,val)
+      else:
+         self.__dict__[name] = val
+   
+   def getTunnelNetworkId(self):
+       """ """
+       val = self.mgr.getService().ICloudNetworkEnvironmentInfo_getTunnelNetworkId(self.handle)
+       return String(self.mgr, val)
+
+
+
+   _Attrs_ = {'tunnelNetworkId':[getTunnelNetworkId,None]}
 
 class ICloudClient(IUnknown):
    """   """
@@ -38098,6 +38202,19 @@ class ICloudClient(IUnknown):
        val = self.mgr.getService().ICloudClient_startCloudNetworkGateway(*req)
        
        return IProgress(self.mgr,val["returnval"]), ICloudNetworkGatewayInfo(self.mgr,val["gatewayInfo"])
+
+   def setupCloudNetworkEnvironment(self, _arg_tunnelNetworkName, _arg_tunnelNetworkRange, _arg_gatewayOsName, _arg_gatewayOsVersion, _arg_gatewayShape):
+       """       """
+   
+       req = (self.handle,)
+       req += (_arg_tunnelNetworkName,)
+       req += (_arg_tunnelNetworkRange,)
+       req += (_arg_gatewayOsName,)
+       req += (_arg_gatewayOsVersion,)
+       req += (_arg_gatewayShape,)
+       val = self.mgr.getService().ICloudClient_setupCloudNetworkEnvironment(*req)
+       
+       return IProgress(self.mgr,val["returnval"]), ICloudNetworkEnvironmentInfo(self.mgr,val["networkEnvironmentInfo"])
 
 
 
@@ -38958,6 +39075,8 @@ class IGuestOSType:
        
           self.recommendedX2APIC = Boolean(self.mgr, handle._recommendedX2APIC)
        
+          self.recommendedCPUCount = UnsignedInt(self.mgr, handle._recommendedCPUCount)
+       
           pass
 
    
@@ -39151,6 +39270,12 @@ class IGuestOSType:
        return self.recommendedX2APIC
 
     def setRecommendedX2APIC(self):
+       raise Error('setters not supported')
+    
+    def getRecommendedCPUCount(self):
+       return self.recommendedCPUCount
+
+    def setRecommendedCPUCount(self):
        raise Error('setters not supported')
     
 
@@ -41747,10 +41872,13 @@ class VirtualSystemDescriptionType:
         
       "BootingFirmware" = 49:
         
+      "CloudInitScriptPath" = 50:
+        
       
    """
-   def __init__(self,mgr,handle):
+   def __init__(self,mgr,handle,isarray=False):
        self.mgr=mgr
+       self.isarray = False
        if isinstance(handle,str):
            self.handle = VirtualSystemDescriptionType._ValueMap[handle]
        else:
@@ -41780,8 +41908,8 @@ class VirtualSystemDescriptionType:
    def __int__(self):
         return self.handle
 
-   _NameMap = {1:'Ignore',2:'OS',3:'Name',4:'Product',5:'Vendor',6:'Version',7:'ProductUrl',8:'VendorUrl',9:'Description',10:'License',11:'Miscellaneous',12:'CPU',13:'Memory',14:'HardDiskControllerIDE',15:'HardDiskControllerSATA',16:'HardDiskControllerSCSI',17:'HardDiskControllerSAS',18:'HardDiskImage',19:'Floppy',20:'CDROM',21:'NetworkAdapter',22:'USBController',23:'SoundCard',24:'SettingsFile',25:'BaseFolder',26:'PrimaryGroup',27:'CloudInstanceShape',28:'CloudDomain',29:'CloudBootDiskSize',30:'CloudBucket',31:'CloudOCIVCN',32:'CloudPublicIP',33:'CloudProfileName',34:'CloudOCISubnet',35:'CloudKeepObject',36:'CloudLaunchInstance',37:'CloudInstanceId',38:'CloudImageId',39:'CloudInstanceState',40:'CloudImageState',41:'CloudInstanceDisplayName',42:'CloudImageDisplayName',43:'CloudOCILaunchMode',44:'CloudPrivateIP',45:'CloudBootVolumeId',46:'CloudOCIVCNCompartment',47:'CloudOCISubnetCompartment',48:'CloudPublicSSHKey',49:'BootingFirmware'}
-   _ValueMap = {'Ignore':1,'OS':2,'Name':3,'Product':4,'Vendor':5,'Version':6,'ProductUrl':7,'VendorUrl':8,'Description':9,'License':10,'Miscellaneous':11,'CPU':12,'Memory':13,'HardDiskControllerIDE':14,'HardDiskControllerSATA':15,'HardDiskControllerSCSI':16,'HardDiskControllerSAS':17,'HardDiskImage':18,'Floppy':19,'CDROM':20,'NetworkAdapter':21,'USBController':22,'SoundCard':23,'SettingsFile':24,'BaseFolder':25,'PrimaryGroup':26,'CloudInstanceShape':27,'CloudDomain':28,'CloudBootDiskSize':29,'CloudBucket':30,'CloudOCIVCN':31,'CloudPublicIP':32,'CloudProfileName':33,'CloudOCISubnet':34,'CloudKeepObject':35,'CloudLaunchInstance':36,'CloudInstanceId':37,'CloudImageId':38,'CloudInstanceState':39,'CloudImageState':40,'CloudInstanceDisplayName':41,'CloudImageDisplayName':42,'CloudOCILaunchMode':43,'CloudPrivateIP':44,'CloudBootVolumeId':45,'CloudOCIVCNCompartment':46,'CloudOCISubnetCompartment':47,'CloudPublicSSHKey':48,'BootingFirmware':49}
+   _NameMap = {1:'Ignore',2:'OS',3:'Name',4:'Product',5:'Vendor',6:'Version',7:'ProductUrl',8:'VendorUrl',9:'Description',10:'License',11:'Miscellaneous',12:'CPU',13:'Memory',14:'HardDiskControllerIDE',15:'HardDiskControllerSATA',16:'HardDiskControllerSCSI',17:'HardDiskControllerSAS',18:'HardDiskImage',19:'Floppy',20:'CDROM',21:'NetworkAdapter',22:'USBController',23:'SoundCard',24:'SettingsFile',25:'BaseFolder',26:'PrimaryGroup',27:'CloudInstanceShape',28:'CloudDomain',29:'CloudBootDiskSize',30:'CloudBucket',31:'CloudOCIVCN',32:'CloudPublicIP',33:'CloudProfileName',34:'CloudOCISubnet',35:'CloudKeepObject',36:'CloudLaunchInstance',37:'CloudInstanceId',38:'CloudImageId',39:'CloudInstanceState',40:'CloudImageState',41:'CloudInstanceDisplayName',42:'CloudImageDisplayName',43:'CloudOCILaunchMode',44:'CloudPrivateIP',45:'CloudBootVolumeId',46:'CloudOCIVCNCompartment',47:'CloudOCISubnetCompartment',48:'CloudPublicSSHKey',49:'BootingFirmware',50:'CloudInitScriptPath'}
+   _ValueMap = {'Ignore':1,'OS':2,'Name':3,'Product':4,'Vendor':5,'Version':6,'ProductUrl':7,'VendorUrl':8,'Description':9,'License':10,'Miscellaneous':11,'CPU':12,'Memory':13,'HardDiskControllerIDE':14,'HardDiskControllerSATA':15,'HardDiskControllerSCSI':16,'HardDiskControllerSAS':17,'HardDiskImage':18,'Floppy':19,'CDROM':20,'NetworkAdapter':21,'USBController':22,'SoundCard':23,'SettingsFile':24,'BaseFolder':25,'PrimaryGroup':26,'CloudInstanceShape':27,'CloudDomain':28,'CloudBootDiskSize':29,'CloudBucket':30,'CloudOCIVCN':31,'CloudPublicIP':32,'CloudProfileName':33,'CloudOCISubnet':34,'CloudKeepObject':35,'CloudLaunchInstance':36,'CloudInstanceId':37,'CloudImageId':38,'CloudInstanceState':39,'CloudImageState':40,'CloudInstanceDisplayName':41,'CloudImageDisplayName':42,'CloudOCILaunchMode':43,'CloudPrivateIP':44,'CloudBootVolumeId':45,'CloudOCIVCNCompartment':46,'CloudOCISubnetCompartment':47,'CloudPublicSSHKey':48,'BootingFirmware':49,'CloudInitScriptPath':50}
 
    Ignore = 1
    OS = 2
@@ -41832,6 +41960,7 @@ class VirtualSystemDescriptionType:
    CloudOCISubnetCompartment = 47
    CloudPublicSSHKey = 48
    BootingFirmware = 49
+   CloudInitScriptPath = 50
 
 class VirtualSystemDescriptionValueType:
    """Used with IVirtualSystemDescription::getValuesByType to describe the value
@@ -47843,7 +47972,7 @@ class IWebsessionManager2(IWebsessionManager, ObjectRefManager):
        self.client = zeep.Client(self.wsdl)
        ObjectRefManager.__init__(self, self.mgr)
 
-  def getService(self):
+  def getService(self) -> ServiceProxy:
       if self.service is None:
           self.service = self.client.create_service('{http://www.virtualbox.org/}vboxBinding', self.url)
       return self.service
